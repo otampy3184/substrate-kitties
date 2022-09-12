@@ -1,4 +1,4 @@
-use support::{decl_storage, decl_module, StorageValue};
+use support::{decl_storage, decl_module, StorageMap, dispatch::Result};
 use system::ensure_signed;
 
 pub trait Trait: system::Trait {}
@@ -6,7 +6,9 @@ pub trait Trait: system::Trait {}
 decl_storage! {
     trait Store for Module<T: Trait> as KittyStorage {
         // StrageとGetter関数を実装していく
-        Value: u64;
+
+        //Mappingストレージ
+        Value: map T::AccountId => u64;
     }
 }
 
