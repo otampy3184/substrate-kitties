@@ -12,5 +12,14 @@ decl_storage! {
 decl_module! {
     trait struct Module<T: Trait> for enum Call where origin: T::Origin {
         // Public関数を実装していく
+        fn set_value(origin, value: u64) -> Result {
+            //originをチェックしてメッセージが有効なアカウントで署名されているか確認
+            let sender = ensure_signed(origin)?;
+
+            //ランタイムストレージにu64の値を格納する
+            <Value<T>>::put(value);
+
+            Ok(())
+        }
     }
 }
