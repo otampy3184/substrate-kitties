@@ -1,10 +1,11 @@
-use support::{decl_storage, decl_module};
+use support::{decl_storage, decl_module, StorageValue};
 
 pub trait Trait: system::Trait {}
 
 decl_storage! {
     trait Store for Module<T: Trait> as KittyStorage {
         // StrageとGetter関数を実装していく
+        Value: u64;
     }
 }
 
