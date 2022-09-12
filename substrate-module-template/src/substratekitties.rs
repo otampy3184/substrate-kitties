@@ -1,4 +1,5 @@
 use support::{decl_storage, decl_module, StorageValue};
+use system::ensure_signed;
 
 pub trait Trait: system::Trait {}
 
