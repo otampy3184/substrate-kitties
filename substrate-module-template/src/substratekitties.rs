@@ -1,5 +1,18 @@
 use support::{decl_storage, decl_module, StorageMap, dispatch::Result};
 use system::ensure_signed;
+use runtime_primitives::traits::{As, Hash};
+use parity_code::{Encode, Decode};
+
+
+// Kitty用のランタイムカスタム構造体を作成
+#[derive(Encode, Decode, Default, Clone, PartialEq)]
+#[cfg_attr(feature = "std", derive(Debug))]
+pub struct Kitty<Hash, Balance> {
+    id: Hash,
+    dna: Hash,
+    price: Balance,
+    gen: u64,
+}
 
 pub trait Trait: system::Trait {}
 
