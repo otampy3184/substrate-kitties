@@ -37,5 +37,23 @@ decl_module! {
 
             Ok(())
         }
+
+        // 新規でKittyを作成する関数
+        fn create_kitty(origin) -> Result {
+            // originの事前チェック
+            let sender = ensure_signed(origin)?;
+
+            // Kittyオブジェクトを使ってnew_kittyを作成する
+            // new_kittyの中身にRuntimeストレージのデータを初期化↓データを入れる
+            let new_kitty = Kitty {
+                // 以下の記述を行うことでT::HashとT::Balanceが初期化される
+                id: <T as system::Trait>::Hashing::hash_of(&0),
+                dna: <T as system::Trait>::Hashing::hash_of(&0),
+                price: <T::Balance as As<u64>>::sa(0),
+                gen: 0,
+            }
+
+            Ok(())
+        }
     }
 }
