@@ -202,6 +202,11 @@ impl substrate_module_template::Trait for Runtime {
 	type Event = Event;
 }
 
+// Event用のタイプ追加
+impl mymodule::Trait for Runtime {
+    type Event = Event;
+}
+
 construct_runtime!(
 	pub enum Runtime with Log(InternalLog: DigestItem<Hash, AuthorityId, AuthoritySignature>) where
 		Block = Block,
@@ -219,7 +224,8 @@ construct_runtime!(
 		Substratekitties: substratekitties::{Module, Call, Storage},
 		TemplateModule: template::{Module, Call, Storage, Event<T>},
 		ExampleModule: substrate_module_template::{Module, Call, Storage, Event<T>},
-
+		// MyModuleの追加
+		MyModule: mymodule::{Module, Call, Storage, Event<T>},
 	}
 );
 
