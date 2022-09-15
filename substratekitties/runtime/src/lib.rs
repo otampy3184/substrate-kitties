@@ -190,7 +190,9 @@ impl sudo::Trait for Runtime {
 }
 
 // impl for substratekitties module
-impl substratekitties::Trait for Runtime {}
+impl substratekitties::Trait for Runtime {
+	type Event = Event;
+}
 
 /// Used for the module template in `./template.rs`
 impl template::Trait for Runtime {
@@ -200,11 +202,6 @@ impl template::Trait for Runtime {
 /// Used for the module template in `./template.rs`
 impl substrate_module_template::Trait for Runtime {
 	type Event = Event;
-}
-
-// Event用のタイプ追加
-impl mymodule::Trait for Runtime {
-    type Event = Event;
 }
 
 construct_runtime!(
@@ -221,11 +218,9 @@ construct_runtime!(
 		Balances: balances,
 		Sudo: sudo,
 		// Used for the module template in `./template.rs`
-		Substratekitties: substratekitties::{Module, Call, Storage},
+		Substratekitties: substratekitties::{Module, Call, Storage, Event<T>},
 		TemplateModule: template::{Module, Call, Storage, Event<T>},
 		ExampleModule: substrate_module_template::{Module, Call, Storage, Event<T>},
-		// MyModuleの追加
-		MyModule: mymodule::{Module, Call, Storage, Event<T>},
 	}
 );
 
