@@ -1,119 +1,314 @@
+//! The Substrate Node Template runtime. This can be compiled with `#[no_std]`, ready for Wasm.
+
 #![cfg_attr(not(feature = "std"), no_std)]
+// `construct_runtime!` does a lot of recursion and requires us to increase the limit to 256.
+#![recursion_limit="256"]
 
-/// A runtime module template with necessary imports
-/// For more guidance on Substrate modules, see the example module
-/// https://github.com/paritytech/substrate/blob/v1.0/srml/example/src/lib.rs
+#[cfg(feature = "std")]
+use serde::{Serialize, Deserialize};
+use parity_codec::{Encode, Decode};
+use rstd::prelude::*;
+#[cfg(feature = "std")]
+use primitives::bytes;
+use primitives::{ed25519, sr25519, OpaqueMetadata};
+use runtime_primitives::{
+	ApplyResult, transaction_validity::TransactionValidity, generic, create_runtime_str,
+	traits::{self, NumberFor, BlakeTwo256, Block as BlockT, StaticLookup, Verify}
+};
+use client::{
+	block_builder::api::{CheckInherentsResult, InherentData, self as block_builder_api},
+	runtime_api, impl_runtime_apis
+};
+use version::RuntimeVersion;
+#[cfg(feature = "std")]
+use version::NativeVersion;
 
-use support::{decl_module, decl_storage, decl_event, StorageValue, dispatch::Result};
-use system::ensure_signed;
+// A few exports that help ease life for downstream crates.
+#[cfg(any(feature = "std", test))]
+pub use runtime_primitives::BuildStorage;
+pub use consensus::Call as ConsensusCall;
+pub use timestamp::Call as TimestampCall;
+pub use balances::Call as BalancesCall;
+pub use runtime_primitives::{Permill, Perbill};
+pub use timestamp::BlockPeriod;
+pub use support::{StorageValue, construct_runtime};
 
-/// The module's configuration trait.
-pub trait Trait: system::Trait {
-	// TODO: Add other types and constants required configure this module.
+/// The type that is used for identifying authorities.
+pub type AuthorityId = <AuthoritySignature as Verify>::Signer;
 
-	/// The overarching event type.
-	type Event: From<Event<Self>> + Into<<Self as system::Trait>::Event>;
-}
+/// The type used by authorities to prove their ID.
+pub type AuthoritySignature = ed25519::Signature;
 
-// This module's storage items.
-decl_storage! {
-	trait Store for Module<T: Trait> as SubstrateModuleTemplate {
-		// Just a dummy storage item. 
-		// Here we are declaring a StorageValue, `Something` as a Option<u32>
-		// `get(something)` is the default getter which returns either the stored `u32` or `None` if nothing stored
-		Something get(something): Option<u32>;
-	}
-}
+/// Alias to pubkey that identifies an account on the chain.
+pub type AccountId = <AccountSignature as Verify>::Signer;
 
-decl_module! {
-	/// The module declaration.
-	pub struct Module<T: Trait> for enum Call where origin: T::Origin {
-		// Initializing events
-		// this is needed only if you are using events in your module
-		fn deposit_event<T>() = default;
+/// The type used by authorities to prove their ID.
+pub type AccountSignature = sr25519::Signature;
 
-		// Just a dummy entry point.
-		// function that can be called by the external world as an extrinsics call
-		// takes a parameter of the type `AccountId`, stores it and emits an event
-		pub fn do_something(origin, something: u32) -> Result {
-			// TODO: You only need this if you want to check it was signed.
-			let who = ensure_signed(origin)?;
+/// A hash of some data used by the chain.
+pub type Hash = primitives::H256;
 
-			// TODO: Code to execute when something calls this.
-			// For example: the following line stores the passed in u32 in the storage
-			<Something<T>>::put(something);
+/// Index of a block number in the chain.
+pub type BlockNumber = u64;
 
-			// here we are raising the Something event
-			Self::deposit_event(RawEvent::SomethingStored(something, who));
-			Ok(())
+/// Index of an account's extrinsic in the chain.
+pub type Nonce = u64;
+
+// for ./substratekitties.rs 
+mod substratekitties;
+
+/// Used for the module template in `./template.rs`
+mod template;
+
+/// Opaque types. These are used by the CLI to instantiate machinery that don't need to know
+/// the specifics of the runtime. They can then be made to be agnostic over specific formats
+/// of data like extrinsics, allowing for them to continue syncing the network through upgrades
+/// to even the core datastructures.
+pub mod opaque {
+	use super::*;
+
+	/// Opaque, encoded, unchecked extrinsic.
+	#[derive(PartialEq, Eq, Clone, Default, Encode, Decode)]
+	#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+	pub struct UncheckedExtrinsic(#[cfg_attr(feature = "std", serde(with="bytes"))] pub Vec<u8>);
+	#[cfg(feature = "std")]
+	impl std::fmt::Debug for UncheckedExtrinsic {
+		fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+			write!(fmt, "{}", primitives::hexdisplay::HexDisplay::from(&self.0))
 		}
 	}
+	impl traits::Extrinsic for UncheckedExtrinsic {
+		fn is_signed(&self) -> Option<bool> {
+			None
+		}
+	}
+	/// Opaque block header type.
+	pub type Header = generic::Header<BlockNumber, BlakeTwo256, generic::DigestItem<Hash, AuthorityId, AuthoritySignature>>;
+	/// Opaque block type.
+	pub type Block = generic::Block<Header, UncheckedExtrinsic>;
+	/// Opaque block identifier type.
+	pub type BlockId = generic::BlockId<Block>;
+	/// Opaque session key type.
+	pub type SessionKey = AuthorityId;
 }
 
-decl_event!(
-	pub enum Event<T> where AccountId = <T as system::Trait>::AccountId {
-		// Just a dummy event.
-		// Event `Something` is declared with a parameter of the type `u32` and `AccountId`
-		// To emit this event, we call the deposit funtion, from our runtime funtions
-		SomethingStored(u32, AccountId),
+/// This runtime version.
+pub const VERSION: RuntimeVersion = RuntimeVersion {
+	spec_name: create_runtime_str!("substratekitties"),
+	impl_name: create_runtime_str!("substratekitties"),
+	authoring_version: 3,
+	spec_version: 4,
+	impl_version: 4,
+	apis: RUNTIME_API_VERSIONS,
+};
+
+/// The version infromation used to identify this runtime when compiled natively.
+#[cfg(feature = "std")]
+pub fn native_version() -> NativeVersion {
+	NativeVersion {
+		runtime_version: VERSION,
+		can_author_with: Default::default(),
+	}
+}
+
+impl system::Trait for Runtime {
+	/// The identifier used to distinguish between accounts.
+	type AccountId = AccountId;
+	/// The lookup mechanism to get account ID from whatever is passed in dispatchers.
+	type Lookup = Indices;
+	/// The index type for storing how many extrinsics an account has signed.
+	type Index = Nonce;
+	/// The index type for blocks.
+	type BlockNumber = BlockNumber;
+	/// The type for hashing blocks and tries.
+	type Hash = Hash;
+	/// The hashing algorithm used.
+	type Hashing = BlakeTwo256;
+	/// The header digest type.
+	type Digest = generic::Digest<Log>;
+	/// The header type.
+	type Header = generic::Header<BlockNumber, BlakeTwo256, Log>;
+	/// The ubiquitous event type.
+	type Event = Event;
+	/// The ubiquitous log type.
+	type Log = Log;
+	/// The ubiquitous origin type.
+	type Origin = Origin;
+}
+
+impl aura::Trait for Runtime {
+	type HandleReport = ();
+}
+
+impl consensus::Trait for Runtime {
+	/// The identifier we use to refer to authorities.
+	type SessionKey = AuthorityId;
+	// The aura module handles offline-reports internally
+	// rather than using an explicit report system.
+	type InherentOfflineReport = ();
+	/// The ubiquitous log type.
+	type Log = Log;
+}
+
+impl indices::Trait for Runtime {
+	/// The type for recording indexing into the account enumeration. If this ever overflows, there
+	/// will be problems!
+	type AccountIndex = u32;
+	/// Use the standard means of resolving an index hint from an id.
+	type ResolveHint = indices::SimpleResolveHint<Self::AccountId, Self::AccountIndex>;
+	/// Determine whether an account is dead.
+	type IsDeadAccount = Balances;
+	/// The uniquitous event type.
+	type Event = Event;
+}
+
+impl timestamp::Trait for Runtime {
+	/// A timestamp: seconds since the unix epoch.
+	type Moment = u64;
+	type OnTimestampSet = Aura;
+}
+
+impl balances::Trait for Runtime {
+	/// The type for recording an account's balance.
+	type Balance = u128;
+	/// What to do if an account's free balance gets zeroed.
+	type OnFreeBalanceZero = ();
+	/// What to do if a new account is created.
+	type OnNewAccount = Indices;
+	/// The uniquitous event type.
+	type Event = Event;
+
+	type TransactionPayment = ();
+	type DustRemoval = ();
+	type TransferPayment = ();
+}
+
+impl sudo::Trait for Runtime {
+	/// The uniquitous event type.
+	type Event = Event;
+	type Proposal = Call;
+}
+
+// impl for substratekitties module
+impl substratekitties::Trait for Runtime {}
+
+/// Used for the module template in `./template.rs`
+impl template::Trait for Runtime {
+	type Event = Event;
+}
+
+/// Used for the module template in `./template.rs`
+impl substrate_module_template::Trait for Runtime {
+	type Event = Event;
+}
+
+construct_runtime!(
+	pub enum Runtime with Log(InternalLog: DigestItem<Hash, AuthorityId, AuthoritySignature>) where
+		Block = Block,
+		NodeBlock = opaque::Block,
+		UncheckedExtrinsic = UncheckedExtrinsic
+	{
+		System: system::{default, Log(ChangesTrieRoot)},
+		Timestamp: timestamp::{Module, Call, Storage, Config<T>, Inherent},
+		Consensus: consensus::{Module, Call, Storage, Config<T>, Log(AuthoritiesChange), Inherent},
+		Aura: aura::{Module},
+		Indices: indices,
+		Balances: balances,
+		Sudo: sudo,
+		// Used for the module template in `./template.rs`
+		Substratekitties: substratekitties::{Module, Call, Storage},
+		TemplateModule: template::{Module, Call, Storage, Event<T>},
+		ExampleModule: substrate_module_template::{Module, Call, Storage, Event<T>},
+
 	}
 );
 
-/// tests for this module
-#[cfg(test)]
-mod tests {
-	use super::*;
+/// The type used as a helper for interpreting the sender of transactions.
+type Context = system::ChainContext<Runtime>;
+/// The address format for describing accounts.
+type Address = <Indices as StaticLookup>::Source;
+/// Block header type as expected by this runtime.
+pub type Header = generic::Header<BlockNumber, BlakeTwo256, Log>;
+/// Block type as expected by this runtime.
+pub type Block = generic::Block<Header, UncheckedExtrinsic>;
+/// BlockId type as expected by this runtime.
+pub type BlockId = generic::BlockId<Block>;
+/// Unchecked extrinsic type as expected by this runtime.
+pub type UncheckedExtrinsic = generic::UncheckedMortalCompactExtrinsic<Address, Nonce, Call, AccountSignature>;
+/// Extrinsic type that has already been checked.
+pub type CheckedExtrinsic = generic::CheckedExtrinsic<AccountId, Nonce, Call>;
+/// Executive: handles dispatch to the various modules.
+pub type Executive = executive::Executive<Runtime, Block, Context, Balances, AllModules>;
 
-	use runtime_io::with_externalities;
-	use primitives::{H256, Blake2Hasher};
-	use support::{impl_outer_origin, assert_ok};
-	use runtime_primitives::{
-		BuildStorage,
-		traits::{BlakeTwo256, IdentityLookup},
-		testing::{Digest, DigestItem, Header}
-	};
+// Implement our runtime API endpoints. This is just a bunch of proxying.
+impl_runtime_apis! {
+	impl runtime_api::Core<Block> for Runtime {
+		fn version() -> RuntimeVersion {
+			VERSION
+		}
 
-	impl_outer_origin! {
-		pub enum Origin for Test {}
+		fn execute_block(block: Block) {
+			Executive::execute_block(block)
+		}
+
+		fn initialize_block(header: &<Block as BlockT>::Header) {
+			Executive::initialize_block(header)
+		}
+
+		fn authorities() -> Vec<AuthorityId> {
+			panic!("Deprecated, please use `AuthoritiesApi`.")
+		}
 	}
 
-	// For testing the module, we construct most of a mock runtime. This means
-	// first constructing a configuration type (`Test`) which `impl`s each of the
-	// configuration traits of modules we want to use.
-	#[derive(Clone, Eq, PartialEq)]
-	pub struct Test;
-	impl system::Trait for Test {
-		type Origin = Origin;
-		type Index = u64;
-		type BlockNumber = u64;
-		type Hash = H256;
-		type Hashing = BlakeTwo256;
-		type Digest = Digest;
-		type AccountId = u64;
-		type Lookup = IdentityLookup<Self::AccountId>;
-		type Header = Header;
-		type Event = ();
-		type Log = DigestItem;
-	}
-	impl Trait for Test {
-		type Event = ();
-	}
-	type TemplateModule = Module<Test>;
-
-	// This function basically just builds a genesis storage key/value store according to
-	// our desired mockup.
-	fn new_test_ext() -> runtime_io::TestExternalities<Blake2Hasher> {
-		system::GenesisConfig::<Test>::default().build_storage().unwrap().0.into()
+	impl runtime_api::Metadata<Block> for Runtime {
+		fn metadata() -> OpaqueMetadata {
+			Runtime::metadata().into()
+		}
 	}
 
-	#[test]
-	fn it_works_for_default_value() {
-		with_externalities(&mut new_test_ext(), || {
-			// Just a dummy test for the dummy funtion `do_something`
-			// calling the `do_something` function with a value 42
-			assert_ok!(TemplateModule::do_something(Origin::signed(1), 42));
-			// asserting that the stored value is equal to what we stored
-			assert_eq!(TemplateModule::something(), Some(42));
-		});
+	impl block_builder_api::BlockBuilder<Block> for Runtime {
+		fn apply_extrinsic(extrinsic: <Block as BlockT>::Extrinsic) -> ApplyResult {
+			Executive::apply_extrinsic(extrinsic)
+		}
+
+		fn finalize_block() -> <Block as BlockT>::Header {
+			Executive::finalize_block()
+		}
+
+		fn inherent_extrinsics(data: InherentData) -> Vec<<Block as BlockT>::Extrinsic> {
+			data.create_extrinsics()
+		}
+
+		fn check_inherents(block: Block, data: InherentData) -> CheckInherentsResult {
+			data.check_extrinsics(&block)
+		}
+
+		fn random_seed() -> <Block as BlockT>::Hash {
+			System::random_seed()
+		}
+	}
+
+	impl runtime_api::TaggedTransactionQueue<Block> for Runtime {
+		fn validate_transaction(tx: <Block as BlockT>::Extrinsic) -> TransactionValidity {
+			Executive::validate_transaction(tx)
+		}
+	}
+
+	impl consensus_aura::AuraApi<Block> for Runtime {
+		fn slot_duration() -> u64 {
+			Aura::slot_duration()
+		}
+	}
+
+	impl offchain_primitives::OffchainWorkerApi<Block> for Runtime {
+		fn offchain_worker(n: NumberFor<Block>) {
+			Executive::offchain_worker(n)
+		}
+	}
+
+	impl consensus_authorities::AuthoritiesApi<Block> for Runtime {
+		fn authorities() -> Vec<AuthorityId> {
+			Consensus::authorities()
+		}
 	}
 }
