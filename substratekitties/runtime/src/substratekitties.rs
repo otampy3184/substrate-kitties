@@ -24,10 +24,12 @@ decl_event!(
     pub enum Event<T>
     where
         <T as system::Trait>::AccountId,
-        <T as system::Trait>::Hash
+        <T as system::Trait>::Hash,
+        <T as balances::Trait>::Balance
     {
         // 作成時用のイベント
         Created(AccountId, Hash),
+        PriceSet(AccountId, Hash, Balance),
     }
 );
 
@@ -87,6 +89,28 @@ decl_module! {
             // Nonceを一つ増やす
             <Nonce<T>>::mutate(|n| *n += 1);
 
+            Ok(())
+        }
+
+        // 価格を設定するモジュール
+        fn set_price(origin, kitty_id: T::Hash, new_price: T::Balance) -> Result {
+            let sender = ensure_signed(origin)?;
+
+            // Kittyが存在しているか確認する
+            ensure!(<Kitties<T>>::exists(kitty_id), "This cat does not exist");
+
+            // Owenerの所有権を確認する
+            let owner = Self::owner_of(kitty_id).ok_or("No owner for this kitty")?;
+            ensure!(owner == sender, "You do not own this cat");
+
+            let mut kitty = Self::kitty(kitty_id);
+
+            // 新しい価格の代入し、ストレージの情報をアップデート
+            kitty.price = new_price;
+            <Kitties<T>>::insert(kitty_id, kitty);
+
+            Self::deposit_event(RawEvent::PriceSet(sender, kitty_id, new_price));
+            
             Ok(())
         }
     }
