@@ -64,32 +64,15 @@ decl_module! {
         fn deposit_event<T>() = default;
 
         fn create_kitty(origin) -> Result {
-            // originをチェックしてメッセージが有効なアカウントで署名されているか確認
+            // originを確認
             let sender = ensure_signed(origin)?;
-
-            // KittyCountを取得し、オーバーフローチェックをしてから1インクリメントする
-            let owned_kitty_count = Self::owned_kitty_count(&sender);
-
-            let new_owned_kitty_count = owned_kitty_count.checked_add(1)
-            .ok_or("Overflow adding a new kitty count to owned kitty count")?;
-
-            // all_kitties_countを使って現在のKittyの数をえる
-            let all_kitties_count = Self::all_kitties_count();
-
-            // Kittyを新しく追加するため、AllKittiysCountを一つ増やすした値を作成する
-            // インクリメント時は必ずchecked_add()を使ってオーバーフローを検知すること
-            let new_all_kitties_count = all_kitties_count.checked_add(1)
-            .ok_or("overflow adding a new kitty to total supply")?;
-
+            
             // random_seedを使ってランダムハッシュを作成
             let nonce = <Nonce<T>>::get();
             let random_hash = (<system::Module<T>>::random_seed(), &sender, nonce)
                 .using_encoded(<T as system::Trait>::Hashing::hash);
 
-            //KittyOwnerストレージを使ってKittyの所有権を確認する
-            ensure!(!<KittyOwner<T>>::exists(random_hash), "Kitty already exists");
-
-             // Kittyオブジェクトを使ってnew_kittyを作成する
+            // Kittyオブジェクトを使ってnew_kittyを作成する
             // new_kittyの中身にRuntimeストレージのデータを初期化↓データを入れる
             let new_kitty = Kitty {
                 id: random_hash,
@@ -98,30 +81,62 @@ decl_module! {
                 gen: 0,
             };
 
-            // 作成したKittyをストレージに加えていく
-            <Kitties<T>>::insert(random_hash, new_kitty);
-            <KittyOwner<T>>::insert(random_hash, &sender);
-
-            // GobalKittyTrackingのストレージを更新していく
-            // まずAllKittiesArrayのマッピングリストに登録したKittyを追加
-            <AllKittiesArray<T>>::insert(all_kitties_count, random_hash);
-            // 新たなKittyCountの値を追加する
-            <AllKittiesCount<T>>::put(new_all_kitties_count);
-            // 逆向きのマッピングリストン追加
-            <AllKittiesIndex<T>>::insert(random_hash, all_kitties_count);
-
-            // 所有しているKittyの情報を更新する
-            <OwnedKittiesArray<T>>::insert((sender.clone(), owned_kitty_count), random_hash);
-            <OwnedKittiesCount<T>>::insert(&sender, new_owned_kitty_count);
-            <OwnedKittiesIndex<T>>::insert(random_hash, owned_kitty_count);
+            // リファクタリングしたMintを使う
+            Self::mint(sender, random_hash, new_kitty)?;
 
             // Nonceを一つ増やす
             <Nonce<T>>::mutate(|n| *n += 1);
 
-            // Eventを呼び出す(create時に使ったアドレスとランダムハッシュを渡す)
-            Self::deposit_event(RawEvent::Created(sender, random_hash));
-
             Ok(())
         }
+    }
+}
+
+// mintを切り出し
+impl<T: Trait> Module<T> {
+    fn mint(to: T::AccountId, kitty_id: T::Hash, new_kitty: Kitty<T::Hash, T::Balance>) -> Result {
+        // originをチェックしてメッセージが有効なアカウントで署名されているか確認
+        ensure!(!<KittyOwner<T>>::exists(kitty_id), "Kitty already exists");
+        // KittyCountを取得し、オーバーフローチェックをしてから1インクリメントする
+        let owned_kitty_count = Self::owned_kitty_count(&to);
+
+        let new_owned_kitty_count = owned_kitty_count.checked_add(1)
+        .ok_or("Overflow adding a new kitty count to owned kitty count")?;
+
+        // all_kitties_countを使って現在のKittyの数をえる
+        let all_kitties_count = Self::all_kitties_count();
+
+        // Kittyを新しく追加するため、AllKittiysCountを一つ増やすした値を作成する
+        // インクリメント時は必ずchecked_add()を使ってオーバーフローを検知すること
+        let new_all_kitties_count = all_kitties_count.checked_add(1)
+            .ok_or("overflow adding a new kitty to total supply")?;
+
+
+
+        //KittyOwnerストレージを使ってKittyの所有権を確認する
+        ensure!(!<KittyOwner<T>>::exists(kitty_id), "Kitty already exists");
+
+        // 作成したKittyをストレージに加えていく
+        <Kitties<T>>::insert(kitty_id, new_kitty);
+        <KittyOwner<T>>::insert(kitty_id, &to);
+
+        // GobalKittyTrackingのストレージを更新していく
+        // まずAllKittiesArrayのマッピングリストに登録したKittyを追加
+        <AllKittiesArray<T>>::insert(all_kitties_count, kitty_id);
+        // 新たなKittyCountの値を追加する
+        <AllKittiesCount<T>>::put(new_all_kitties_count);
+        // 逆向きのマッピングリストン追加
+        <AllKittiesIndex<T>>::insert(kitty_id, all_kitties_count);
+
+        // 所有しているKittyの情報を更新する
+        <OwnedKittiesArray<T>>::insert((to.clone(), owned_kitty_count), kitty_id);
+        <OwnedKittiesCount<T>>::insert(&to, new_owned_kitty_count);
+        <OwnedKittiesIndex<T>>::insert(kitty_id, owned_kitty_count);
+
+
+        // Eventを呼び出す(create時に使ったアドレスとランダムハッシュを渡す)
+        Self::deposit_event(RawEvent::Created(to, kitty_id));
+
+        Ok(())
     }
 }
