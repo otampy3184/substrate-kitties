@@ -36,6 +36,14 @@ decl_storage! {
         Kitties get(kitty): map T::Hash => Kitty<T::Hash, T::Balance>;
         // kittyを所有するアカウントIDにkittyidをマッピングするKittyOwnerストレージ
         KittyOwner get(owner_of): map T::Hash => Option<T::AccountId>;
+
+        // 全Kiityをリストとして追跡するためのAllKittiesArray
+        AllKittiesArray get(kitty_by_index): map u64 => T::Hash;
+        // AllKittiesArrayで利用するCount
+        AllKittiesCount get(all_kitties_count): u64;
+        // AllkittiesをIndexとして管理するAllKittiesIndex
+        AllKittiesIndex: map T::Hash => u64;
+
         // KittyIdから所有アカウントを特定するOwnedKittyストレージ
         OwnedKitty get(kitty_of_owner): map T::AccountId => T::Hash;
 
@@ -54,6 +62,14 @@ decl_module! {
         fn create_kitty(origin) -> Result {
             // originをチェックしてメッセージが有効なアカウントで署名されているか確認
             let sender = ensure_signed(origin)?;
+
+            // all_kitties_countを使って現在のKittyの数をえる
+            let all_kitties_count = Self::all_kitties_count();
+
+            // Kittyを新しく追加するため、AllKittiysCountを一つ増やすした値を作成する
+            // インクリメント時は必ずchecked_add()を使ってオーバーフローを検知すること
+            let new_all_kitties_count = all_kitties_count.checked_add(1)
+            .ok_or("overflow adding a new kitty to total supply")?;
 
             // random_seedを使ってランダムハッシュを作成
             let nonce = <Nonce<T>>::get();
@@ -75,6 +91,15 @@ decl_module! {
             // 作成したKittyをストレージに加えていく
             <Kitties<T>>::insert(random_hash, new_kitty);
             <KittyOwner<T>>::insert(random_hash, &sender);
+
+            // GobalKittyTrackingのストレージを更新していく
+            // まずAllKittiesArrayのマッピングリストに登録したKittyを追加
+            <AllKittiesArray<T>>::insert(all_kitties_count, random_hash);
+            // 新たなKittyCountの値を追加する
+            <AllKittiesCount<T>>::put(new_all_kitties_count);
+            // 逆向きのマッピングリストン追加
+            <AllKittiesIndex::insert(random_hash, all_kitties_count);
+
             <OwnedKitty<T>>::insert(&sender, random_hash);
 
             // Nonceを一つ増やす
