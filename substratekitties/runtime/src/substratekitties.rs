@@ -1,4 +1,4 @@
-use support::{decl_storage, decl_module, StorageValue, StorageMap, dispatch::Result, ensure};
+use support::{decl_storage, decl_module, StorageValue, StorageMap, dispatch::Result, ensure, decl_event};
 use system::ensure_signed;
 use runtime_primitives::traits::{As, Hash};
 use parity_codec::{Encode, Decode};
@@ -13,7 +13,22 @@ pub struct Kitty<Hash, Balance> {
     gen: u64,
 }
 
-pub trait Trait: balances::Trait {}
+pub trait Trait: balances::Trait {
+    // 外部用のEventタイプを定義
+    type Event: From<Event<Self>> + Into<<Self as system::Trait>::Event>;
+}
+
+// 外部発信用のイベント
+decl_event!(
+    pub enum Event<T>
+    where
+        <T as system::Trait>::AccountId,
+        <T as system::Trait>::Hash
+    {
+        // 作成時用のイベント
+        Created(AccountId, Hash),
+    }
+);
 
 decl_storage! {
     trait Store for Module<T: Trait> as KittyStorage {
@@ -32,6 +47,9 @@ decl_storage! {
 decl_module! {
     // Public関数を実装していく
     pub struct Module<T: Trait> for enum Call where origin: T::Origin {
+        // Eventをデポジットするための関数
+        // ランタイム開発の一般的なパターン
+        fn deposit_event<T>() = default;
 
         fn create_kitty(origin) -> Result {
             // originをチェックしてメッセージが有効なアカウントで署名されているか確認
@@ -61,6 +79,9 @@ decl_module! {
 
             // Nonceを一つ増やす
             <Nonce<T>>::mutate(|n| *n += 1);
+
+            // Eventを呼び出す(create時に使ったアドレスとランダムハッシュを渡す)
+            Self::deposit_event(RawEvent::Created(sender, random_hash));
 
             Ok(())
         }
