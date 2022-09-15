@@ -44,8 +44,11 @@ decl_storage! {
         // AllkittiesをIndexとして管理するAllKittiesIndex
         AllKittiesIndex: map T::Hash => u64;
 
-        // KittyIdから所有アカウントを特定するOwnedKittyストレージ
-        OwnedKitty get(kitty_of_owner): map T::AccountId => T::Hash;
+        // KittyIdから所有アカウントを特定するOwnedKittiesArrayストレージ
+        // タプルを使って高次配列にし、一ユーザーが複数のKittyを持てるようにする
+        OwnedKittiesArray get(kitty_of_owner_by_index): map (T::AccountId, u64) => T::Hash;
+        OwnedKittiesCount get(owned_kitty_count): map T::Hash => u64;
+        OwnedKittiesIndex: map T::Hash => u64;
 
         // 一意の数字Nonce
         Nonce: u64;
@@ -62,6 +65,11 @@ decl_module! {
         fn create_kitty(origin) -> Result {
             // originをチェックしてメッセージが有効なアカウントで署名されているか確認
             let sender = ensure_signed(origin)?;
+
+            // KittyCountを取得し、オーバーフローチェックをしてから1インクリメントする
+            let owned_kitty_count = Self::owned_kitty_count(&sender);
+            let new_owned_kitty_count = owned_kitty_count.checked_add(1)
+            .ok_or("Overflow adding a new kitty count to owned kitty count")?;
 
             // all_kitties_countを使って現在のKittyの数をえる
             let all_kitties_count = Self::all_kitties_count();
@@ -100,7 +108,10 @@ decl_module! {
             // 逆向きのマッピングリストン追加
             <AllKittiesIndex::insert(random_hash, all_kitties_count);
 
-            <OwnedKitty<T>>::insert(&sender, random_hash);
+            // 所有しているKittyの情報を更新する
+            <OwnedKittiesArray<T>>::insert((sender.clone(), owned_kitty_count), random_hash);
+            <OwnedKittiesCount<T>>::insert(&sender, new_owned_kitty_count);
+            <OwnedKittiesIndex<T>>::insert(random_hash, owned_kitty_count);
 
             // Nonceを一つ増やす
             <Nonce<T>>::mutate(|n| *n += 1);
