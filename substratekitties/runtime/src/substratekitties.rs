@@ -1,5 +1,5 @@
 use support::{decl_storage, decl_module, StorageValue, StorageMap,
-    dispatch::Result, ensure, decl_event, Currency};
+    dispatch::Result, ensure, decl_event, traits::Currency};
 use system::ensure_signed;
 use runtime_primitives::traits::{As, Hash, Zero};
 use parity_codec::{Encode, Decode};
@@ -147,7 +147,7 @@ decl_module! {
             ensure!(kitty_price <= max_price, "The cat you want to buy is costs more than your max price");
 
             // Balanceモジュールのtransfer()を使って資金を移転する
-            <balances::Module<T> as Currency<_>>::transfer(&from, &to, value)?;
+            <balances::Module<T> as Currency<_>>::transfer(&sender, &owner, kitty_price)?;
             
             // ACTION: Transfer the kitty using `transfer_from()` including a proof of why it cannot fail
             Self::transfer_from(owner.clone(), sender.clone(), kitty_id)
