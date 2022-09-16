@@ -63,10 +63,10 @@ decl_storage! {
 decl_module! {
     // Public関数を実装していく
     pub struct Module<T: Trait> for enum Call where origin: T::Origin {
-        // Eventをデポジットするための関数
-        // ランタイム開発の一般的なパターン
+        // Eventをデポジットするための関数　＝＞　ランタイム開発の一般的なパターン
         fn deposit_event<T>() = default;
 
+        // Kittyを作成するための関数
         fn create_kitty(origin) -> Result {
             // originを確認
             let sender = ensure_signed(origin)?;
@@ -94,7 +94,7 @@ decl_module! {
             Ok(())
         }
 
-        // 価格を設定するモジュール
+        // 価格を設定する関数
         fn set_price(origin, kitty_id: T::Hash, new_price: T::Balance) -> Result {
             let sender = ensure_signed(origin)?;
 
@@ -116,7 +116,7 @@ decl_module! {
             Ok(())
         }
 
-        // Kittyの所有権を移転するモジュール
+        // Kittyの所有権を移転する関数
         fn transfer(origin, to: T::AccountId, kitty_id: T::Hash) -> Result {
             let sender = ensure_signed(origin)?;
 
@@ -157,7 +157,6 @@ decl_module! {
             and minting ensure there won't ever be more than `max()` kitties, \
             which means transfer cannot cause an overflow; \
             qed");
-
 
             // kittyを市場から戻す
             kitty.price = <T::Balance as As<u64>>::sa(0);
