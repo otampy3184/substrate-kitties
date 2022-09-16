@@ -27,9 +27,10 @@ decl_event!(
         <T as system::Trait>::Hash,
         <T as balances::Trait>::Balance
     {
-        // 作成時用のイベント
+        // 各種イベント
         Created(AccountId, Hash),
         PriceSet(AccountId, Hash, Balance),
+        Transferred(AccountId, AccountId, Hash),
     }
 );
 
@@ -113,10 +114,22 @@ decl_module! {
             
             Ok(())
         }
+
+        // Kittyの所有権を移転するモジュール
+        fn transfer(origin, to: T::AccountId, kitty_id: T::Hash) -> Result {
+            let sender = ensure_signed(origin)?;
+
+            let owner = Self::owner_of(kitty_id).ok_or("No owner for this kitty")?;
+            ensure!(owner == sender, "You do not own this kitty");
+
+            Self::transfer_from(sender, to, kitty_id)?;
+
+            Ok(())
+        }
     }
 }
 
-// mintを切り出し
+// mintとTransferを
 impl<T: Trait> Module<T> {
     fn mint(to: T::AccountId, kitty_id: T::Hash, new_kitty: Kitty<T::Hash, T::Balance>) -> Result {
         // originをチェックしてメッセージが有効なアカウントで署名されているか確認
@@ -162,5 +175,24 @@ impl<T: Trait> Module<T> {
         Self::deposit_event(RawEvent::Created(to, kitty_id));
 
         Ok(())
+    }
+
+    fn transfer_from(from: T::AccountId, to: AccountId, kitty_id::Hash) => Result {
+        // Kittyがownerを持っているか確認してから代入
+        let owner = Self::owner_of(kitty_id).ok_or("No owner for this kitty")?;
+
+        // 送信者の所有権を確認
+        ensure!(owner == from, "from account does not owen this kitty");
+
+        // 移転用の準備
+        let owned_kitty_count_from = Self::owned_kitty_count(&from);
+        let owned_kitty_count_to = Self::owned_kitty_count(&to);
+
+        let kitty_index = <OwnedKittiesIndex<T>>::get(kitty_id);
+        if kitty_index != new_owned_kitty_count_from {
+            let last_kitty_id = <OwnedKittiesArray<T>>::get((from.clone(), new_owned_kitty_count_from));
+            <OwnedKittiesArray<T>>::insert((from.clone(), kitty_index), last_kitty_id);
+            <OwnedKittiesIndex<T>>::insert(last_kitty_id, kitty_index);
+        }
     }
 }
