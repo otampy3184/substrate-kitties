@@ -1,7 +1,7 @@
 use support::{decl_storage, decl_module, StorageValue, StorageMap,
-    dispatch::Result, ensure, decl_event};
+    dispatch::Result, ensure, decl_event, Currency};
 use system::ensure_signed;
-use runtime_primitives::traits::{As, Hash};
+use runtime_primitives::traits::{As, Hash, Zero};
 use parity_codec::{Encode, Decode};
 
 // Kitty用のランタイムカスタム構造体を作成
@@ -31,6 +31,7 @@ decl_event!(
         Created(AccountId, Hash),
         PriceSet(AccountId, Hash, Balance),
         Transferred(AccountId, AccountId, Hash),
+        Bought(AccountId, AccountId, Hash, Balance),
     }
 );
 
@@ -123,6 +124,47 @@ decl_module! {
             ensure!(owner == sender, "You do not own this kitty");
 
             Self::transfer_from(sender, to, kitty_id)?;
+
+            Ok(())
+        }
+
+        // 売りに出されたKittyを購入する関数
+        fn buy_kitty(origin, kitty_id: T::Hash, max_price: T::Balance) -> Result {
+            let sender = ensure_signed(origin)?;
+
+            // 存在確認
+            ensure!(<Kitties<T>>::exists(kitty_id), "This cat does not exits");
+
+            // Owenerの所有権を確認する
+            let owner = Self::owner_of(kitty_id).ok_or("No owner for this kitty")?;
+            ensure!(owner != sender, "You can't buy your own cat");
+
+            let mut kitty = Self::kitty(kitty_id);
+
+            // Zero Traitsを使ってkittyの値段が0でない(＝売りに出されている)か調べる＋言い値以下かチェック
+            let kitty_price = kitty.price;
+            ensure!(kitty_price.is_zero(), "This cat you want to buy is not for sale");
+            ensure!(kitty_price <= max_price, "The cat you want to buy is costs more than your max price");
+
+            // Balanceモジュールのtransfer()を使って資金を移転する
+            <balances::Module<T> as Currency<_>>::transfer(&from, &to, value)?;
+            
+            // ACTION: Transfer the kitty using `transfer_from()` including a proof of why it cannot fail
+            Self::transfer_from(owner.clone(), sender.clone(), kitty_id)
+            .expect("`owner` is shown to own the kitty; \
+            `owner` must have greater than 0 kitties, so transfer cannot cause underflow; \
+            `all_kitty_count` shares the same type as `owned_kitty_count` \
+            and minting ensure there won't ever be more than `max()` kitties, \
+            which means transfer cannot cause an overflow; \
+            qed");
+
+
+            // kittyを市場から戻す
+            kitty.price = <T::Balance as As<u64>>::sa(0);
+            <Kitties<T>>::insert(kitty_id, kitty);
+
+            // Event発行
+            Self::deposit_event(RawEvent::Bought(sender, owner, kitty_id, kitty_price));
 
             Ok(())
         }
