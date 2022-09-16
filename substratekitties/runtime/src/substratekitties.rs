@@ -177,7 +177,7 @@ impl<T: Trait> Module<T> {
         Ok(())
     }
 
-    fn transfer_from(from: T::AccountId, to: AccountId, kitty_id::Hash) => Result {
+    fn transfer_from(from: T::AccountId, to: T::AccountId, kitty_id: T::Hash) -> Result {
         // Kittyがownerを持っているか確認してから代入
         let owner = Self::owner_of(kitty_id).ok_or("No owner for this kitty")?;
 
@@ -204,7 +204,7 @@ impl<T: Trait> Module<T> {
 
         // 結果を記録していく
         <KittyOwner<T>>::insert(&kitty_id, &to);
-        <OwnedKittiesArray<T>>::insert(kitty_id, owned_kitty_count_to);
+        <OwnedKittiesIndex<T>>::insert(kitty_id, owned_kitty_count_to);
 
         <OwnedKittiesArray<T>>::remove((from.clone(), new_owned_kitty_count_from));
         <OwnedKittiesArray<T>>::insert((to.clone(), owned_kitty_count_to), kitty_id);
@@ -214,6 +214,6 @@ impl<T: Trait> Module<T> {
         
         Self::deposit_event(RawEvent::Transferred(from, to, kitty_id));
 
-        OK(());
+        Ok(())
     }
 }
