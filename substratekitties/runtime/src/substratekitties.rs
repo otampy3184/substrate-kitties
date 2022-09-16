@@ -188,11 +188,32 @@ impl<T: Trait> Module<T> {
         let owned_kitty_count_from = Self::owned_kitty_count(&from);
         let owned_kitty_count_to = Self::owned_kitty_count(&to);
 
+        // 事前チェック
+        let new_owned_kitty_count_to = owned_kitty_count_to.checked_add(1)
+            .ok_or("overflow adding a new kitty to total supply")?;
+        let new_owned_kitty_count_from = owned_kitty_count_from.checked_add(1)
+            .ok_or("overflow adding a new kitty to total supply")?;
+
+        // swap and popでトランスファーを行う
         let kitty_index = <OwnedKittiesIndex<T>>::get(kitty_id);
         if kitty_index != new_owned_kitty_count_from {
             let last_kitty_id = <OwnedKittiesArray<T>>::get((from.clone(), new_owned_kitty_count_from));
             <OwnedKittiesArray<T>>::insert((from.clone(), kitty_index), last_kitty_id);
             <OwnedKittiesIndex<T>>::insert(last_kitty_id, kitty_index);
         }
+
+        // 結果を記録していく
+        <KittyOwner<T>>::insert(&kitty_id, &to);
+        <OwnedKittiesArray<T>>::insert(kitty_id, owned_kitty_count_to);
+
+        <OwnedKittiesArray<T>>::remove((from.clone(), new_owned_kitty_count_from));
+        <OwnedKittiesArray<T>>::insert((to.clone(), owned_kitty_count_to), kitty_id);
+
+        <OwnedKittiesCount<T>>::insert(&from, new_owned_kitty_count_from);
+        <OwnedKittiesCount<T>>::insert(&to, new_owned_kitty_count_to);
+        
+        Self::deposit_event(RawEvent::Transferred(from, to, kitty_id));
+
+        OK(());
     }
 }
