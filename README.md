@@ -1,6 +1,7 @@
 # Substratekitties
 
 [Substrate Collectable](https://substrate-developer-hub.github.io/substrate-collectables-workshop/)に従い、Substrateを使った独自のチェーンを作って実際に内部のランタイムを編集してカスタムを行う
+作成したブロックチェーンの動きをLocalホスト上で確認できる
 
 # Enviroment:
 - Ubuntu x86_64
